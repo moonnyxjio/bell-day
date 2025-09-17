@@ -1,0 +1,135 @@
+/* Google Font */
+@import url("https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap");
+
+:root{
+  --bg:#0f172a;          /* 배경 (slate-900) */
+  --card:#0b1223;        /* 카드 배경 */
+  --ink:#e5e7eb;         /* 기본 텍스트 */
+  --muted:#94a3b8;       /* 보조 텍스트 */
+  --brand:#7c3aed;       /* 포인트 보라 */
+  --brand-2:#22c55e;     /* 포인트 연두 */
+  --bad:#ef4444;         /* 오답 */
+  --ok:#e5e7eb;          /* 정답 단어 */
+  --ring: rgba(124,58,237,.25);
+}
+
+*{ box-sizing:border-box }
+
+html,body,#root{ height:100% }
+body{
+  margin:0;
+  color:var(--ink);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #1f2937 0%, transparent 60%),
+    radial-gradient(900px 800px at 120% 0%, #111827 0%, transparent 50%),
+    linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Pretendard", Helvetica, Arial;
+}
+
+/* 레이아웃 */
+.container{
+  min-height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:28px 16px;
+}
+.card{
+  width:100%;
+  max-width:980px;
+  background:rgba(255,255,255,.02);
+  backdrop-filter: blur(6px);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:20px;
+  padding:28px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.35);
+}
+
+/* 타이틀 */
+.title{
+  margin:0;
+  font-size:38px;
+  line-height:1.15;
+  font-weight:800;
+  text-align:left;
+  letter-spacing:.2px;
+}
+.subtitle{
+  margin:8px 0 20px;
+  color:var(--muted);
+  font-size:20px;
+}
+
+/* 입력/텍스트 */
+input, textarea{
+  width:100%;
+  color:var(--ink);
+  background:#0a0f1e;
+  border:1px solid rgba(148,163,184,.25);
+  border-radius:14px;
+  padding:12px 14px;
+  font-size:16px;
+  outline: none;
+}
+input:focus, textarea:focus{
+  border-color: var(--brand);
+  box-shadow: 0 0 0 6px var(--ring);
+}
+label{ display:block; margin-bottom:6px; color:var(--muted); font-size:13px; }
+
+/* 행 */
+.row{ display:flex; gap:12px; flex-wrap:wrap; }
+
+/* 버튼 */
+.btn{
+  border:0;
+  background: #1f2937;
+  color:#e5e7eb;
+  padding:12px 18px;
+  border-radius:14px;
+  font-weight:600;
+  cursor:pointer;
+  transition: transform .05s ease, background .2s ease, opacity .2s ease;
+}
+.btn:hover{ transform: translateY(-1px); opacity:.95; }
+.btn.primary{ background: linear-gradient(135deg, var(--brand) 0%, #4f46e5 100%); }
+.btn.success{ background: linear-gradient(135deg, var(--brand-2) 0%, #16a34a 100%); }
+.btn.purple{ background: linear-gradient(135deg, #7e22ce, var(--brand)); }
+.btn.danger{ background: linear-gradient(135deg, #ef4444, #dc2626); }
+.btn.ghost{ background:transparent; border:1px solid rgba(148,163,184,.25); }
+
+/* 배지/보조 */
+.chip{
+  display:inline-block;
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:999px;
+  background: rgba(124,58,237,.14);
+  color: #c4b5fd;
+}
+
+/* 하이라이트 */
+.word-ok{ color:var(--ok); }
+.word-bad{ color:var(--bad); }
+
+/* 박스 */
+.yellow{
+  border:1px dashed rgba(148,163,184,.4);
+  background: rgba(124,58,237,.08);
+  color:#dbeafe;
+  padding:16px;
+  border-radius:14px;
+  text-align:left;
+  font-size:18px;
+}
+
+/* 표 */
+.list{ width:100%; border-collapse: collapse; margin-top:12px; }
+.list th, .list td{
+  text-align:left;
+  padding:10px 8px;
+  border-bottom:1px solid rgba(148,163,184,.18);
+  font-size:14px;
+}
+.muted{ color:var(--muted); }
+.nav{ display:flex; gap:10px; margin-top:16px; }
