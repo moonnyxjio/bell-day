@@ -1,7 +1,7 @@
 // src/pages/Exam.js
 import React, { useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
-import { QUESTIONS } from "../Data";
+import { QUESTIONS } from "../data";
 
 const norm = (s) =>
   s
