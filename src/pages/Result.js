@@ -1,96 +1,104 @@
 // src/pages/Result.js
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 export default function Result() {
   const nav = useNavigate();
-  const { state } = useLocation();
-  const [showWrongOnly, setShowWrongOnly] = useState(false);
-  const [openId, setOpenId] = useState(null);
+  const { state } = useLocation(); // { name, date, day }
+  const [showWrongOnly, setShowWrongOnly] = useState(true);
+  const [records, setRecords] = useState([]);
 
-  const all = useMemo(
-    () => JSON.parse(localStorage.getItem("records") || "[]"),
-    []
-  );
+  useEffect(() => {
+    const all = JSON.parse(localStorage.getItem("records") || "[]");
+    if (state?.name || state?.date || state?.day) {
+      const filtered = all.filter((r) => {
+        const okName = state?.name ? r.name === state.name : true;
+        const okDate = state?.date ? r.date === state.date : true;
+        const okDay = state?.day ? r.day === state.day : true;
+        return okName && okDate && okDay;
+      });
+      setRecords(filtered);
+    } else {
+      setRecords(all);
+    }
+  }, [state]);
 
-  const rows = useMemo(() => {
-    if (!state?.name || !state?.date || !state?.day) return all.slice(-10);
-    return all.filter(
-      (r) => r.name === state.name && r.date === state.date && r.day === state.day
-    );
-  }, [all, state]);
-
-  const total = rows.reduce((a, r) => a + (r.totalChunks || 0), 0);
-  const wrong = rows.reduce((a, r) => a + (r.wrongIdxs?.length || 0), 0);
-  const right = total - wrong;
-  const pct = total ? Math.round((right / total) * 100) : 0;
-
-  const displayRows = showWrongOnly
-    ? rows.filter((r) => (r.wrongIdxs?.length || 0) > 0)
-    : rows;
+  const summary = useMemo(() => {
+    if (records.length === 0) return { total: 0, sum: 0, chunks: 0 };
+    const totalQuestions = records.length;
+    const sumScore = records.reduce((a, b) => a + (b.score || 0), 0);
+    const sumChunks = records.reduce((a, b) => a + (b.totalChunks || 0), 0);
+    return { total: totalQuestions, sum: sumScore, chunks: sumChunks };
+  }, [records]);
 
   return (
     <div className="container">
       <div className="card">
         <h1 className="title">결과</h1>
-        <p className="subtitle">
-          {state?.name} | {state?.date} | {state?.day?.toUpperCase()}
-        </p>
+        {state?.name && (
+          <div className="muted" style={{ marginBottom: 8 }}>
+            {state.name} · {state.date} · {state.day?.toUpperCase?.?.() || state.day}
+          </div>
+        )}
 
-        <div><strong>점수:</strong> {right}/{total} ({pct}%)</div>
-
-        <div className="nav">
-          <button className="btn" onClick={() => setShowWrongOnly(v => !v)}>
-            {showWrongOnly ? "전체 보기" : "오답만 보기"}
-          </button>
-          <button className="btn primary" onClick={() => nav("/")}>처음으로</button>
+        <div className="card" style={{ marginTop: 8 }}>
+          <div>총 문항: {summary.total}</div>
+          <div>
+            총 점수: {summary.sum} / {summary.chunks} (
+            {summary.chunks ? Math.round((summary.sum / summary.chunks) * 100) : 0}%)
+          </div>
         </div>
 
-        <table className="list" style={{ marginTop: 12 }}>
-          <tbody>
-            {displayRows.map((r, i) => {
-              const wrong = new Set(r.wrongIdxs || []);
-              return (
-                <React.Fragment key={r.ts}>
-                  <tr onClick={() => setOpenId(openId === r.ts ? null : r.ts)}>
-                    <td style={{ textAlign: "left", cursor: "pointer" }}>
-                      {i + 1}. {r.koChunks.join(" / ")}
-                    </td>
-                    <td>{r.totalChunks - wrong.size}/{r.totalChunks}</td>
-                  </tr>
-
-                  {openId === r.ts && (
-                    <tr>
-                      <td colSpan={2}>
-                        <div style={{ marginBottom: 6 }}>정답 문장:</div>
-                        {r.enChunks.map((w, idx) => (
-                          <span
-                            key={idx}
-                            style={{
-                              marginRight: 6,
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              background: wrong.has(idx) ? "#ffe8e8" : "#eef8ff",
-                              color: wrong.has(idx) ? "#c40000" : "#003a70",
-                            }}
-                          >
-                            {w}
-                          </span>
-                        ))}
-
-                        <div style={{ marginTop: 10 }}>학생 답안:</div>
-                        <div style={{ padding: "6px", border: "1px solid #ddd" }}>
-                          {r.user}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="nav" style={{ marginTop: 12 }}>
+          <button
+            className="btn"
+            onClick={() => setShowWrongOnly((v) => !v)}
+          >
+            {showWrongOnly ? "전체 보기" : "오답만 보기"}
+          </button>
+          <button className="btn primary" onClick={() => nav("/")}>
+            처음으로
+          </button>
+        </div>
       </div>
+
+      {records.length === 0 ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          기록이 없어요.
+        </div>
+      ) : (
+        records.map((r, i) => (
+          <div key={r.ts + "-" + i} className="card" style={{ marginTop: 12 }}>
+            <div className="muted" style={{ marginBottom: 6 }}>
+              {r.mode?.toUpperCase?.?.() || r.mode} · Day {r.day} · Q{r.qid} · {r.date}
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              {/* 정답 토큰을 오답만 또는 전체로 표시 */}
+              {r.enChunks.map((tok, idx) => {
+                const wrong = r.wrongIdxs?.includes(idx);
+                if (showWrongOnly && !wrong) return null;
+                return (
+                  <span
+                    key={idx}
+                    className={wrong ? "word-bad" : "word-ok"}
+                    style={{ marginRight: 6 }}
+                  >
+                    {tok}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="muted">
+              점수: {r.score} / {r.totalChunks} (
+              {r.totalChunks ? Math.round((r.score / r.totalChunks) * 100) : 0}%)
+            </div>
+            <details style={{ marginTop: 6 }}>
+              <summary className="muted">내 답 보기</summary>
+              <div style={{ marginTop: 4 }}>{r.user}</div>
+            </details>
+          </div>
+        ))
+      )}
     </div>
   );
 }

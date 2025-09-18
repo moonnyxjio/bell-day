@@ -1,45 +1,63 @@
-import { useNavigate } from "react-router-dom";
+// src/pages/Records.js
+import React, { useEffect, useState } from "react";
 
 export default function Records() {
-  const nav = useNavigate();
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem("bellcat:sessions") || "[]").reverse(); } catch {}
+  const [records, setRecords] = useState([]);
+
+  useEffect(() => {
+    try {
+      const data = JSON.parse(localStorage.getItem("records") || "[]");
+      setRecords(Array.isArray(data) ? data.slice().reverse() : []);
+    } catch {
+      setRecords([]);
+    }
+  }, []);
 
   const clearAll = () => {
-    if (window.confirm("모든 기록을 삭제할까요?")) {
-      localStorage.removeItem("bellcat:sessions");
-      window.location.reload();
-    }
+    if (!window.confirm("모든 기록을 삭제할까요?")) return;
+    localStorage.setItem("records", "[]");
+    setRecords([]);
   };
 
   return (
     <div className="container">
       <div className="card">
-        <h2>저장된 기록</h2>
-        <div className="nav">
-          <button className="btn" onClick={()=>nav("/")}>처음으로</button>
+        <h1 className="title">기록</h1>
+        <div className="nav" style={{ marginTop: 8 }}>
           <button className="btn danger" onClick={clearAll}>전체 삭제</button>
         </div>
-        <table className="list">
-          <thead><tr><th>학생</th><th>날짜</th><th>Day</th><th>저장 시각</th><th>점수</th></tr></thead>
-          <tbody>
-            {list.map((s,i)=>{
-              const totals = s.answers.reduce((acc,a)=>{acc.total+=a.score.total; acc.ok+=a.score.ok; return acc;},{ok:0,total:0});
-              const pct = Math.round((totals.ok / Math.max(1, totals.total))*100);
-              return (
-                <tr key={i}>
-                  <td>{s.name}</td>
-                  <td>{s.date}</td>
-                  <td>{s.day.toUpperCase()}</td>
-                  <td>{new Date(s.createdAt).toLocaleString()}</td>
-                  <td>{pct}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {list.length===0 && <p className="muted">기록이 없습니다.</p>}
       </div>
+
+      {records.length === 0 ? (
+        <div className="card" style={{ marginTop: 12 }}>아직 기록이 없어요.</div>
+      ) : (
+        records.map((r, i) => (
+          <div key={r.ts + "-" + i} className="card" style={{ marginTop: 12 }}>
+            <div className="muted" style={{ marginBottom: 6 }}>
+              {r.name} · {r.date} · Day {r.day} · Q{r.qid} · {r.mode}
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              {r.enChunks?.map((tok, idx) => (
+                <span
+                  key={idx}
+                  className={r.wrongIdxs?.includes(idx) ? "word-bad" : "word-ok"}
+                  style={{ marginRight: 6 }}
+                >
+                  {tok}
+                </span>
+              ))}
+            </div>
+            <div className="muted">
+              점수: {r.score} / {r.totalChunks} (
+              {r.totalChunks ? Math.round((r.score / r.totalChunks) * 100) : 0}%)
+            </div>
+            <details style={{ marginTop: 6 }}>
+              <summary className="muted">내 답 보기</summary>
+              <div style={{ marginTop: 4 }}>{r.user}</div>
+            </details>
+          </div>
+        ))
+      )}
     </div>
   );
 }
