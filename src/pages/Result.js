@@ -3,7 +3,15 @@ import React, { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
-// ----- 통과(마스터) 저장소 -----
+// ----- 관리자 PIN -----
+const ADMIN_PIN = "jchi";
+const isAdminSession = () => sessionStorage.getItem("admin_ok") === "1";
+const setAdminSession = (ok) => {
+  if (ok) sessionStorage.setItem("admin_ok", "1");
+  else sessionStorage.removeItem("admin_ok");
+};
+
+// ----- 통과(마스터) DB -----
 const MASTER_KEY = "mastery_v1";
 const loadMastery = () => {
   try { return JSON.parse(localStorage.getItem(MASTER_KEY) || "{}"); }
@@ -11,21 +19,17 @@ const loadMastery = () => {
 };
 const isMastered = (name, day, qid) => {
   const db = loadMastery();
-  const keyName = name || "_anon";
-  const keyDay = day || "_day";
-  const arr = db[keyName]?.[keyDay] || [];
+  const arr = db[name || "_anon"]?.[day || "_day"] || [];
   return arr.includes(qid);
 };
 
-// ----- UI 토큰 렌더 -----
+// UI 토큰 렌더
 const Tokens = ({ tokens, wrongIdxs }) => (
   <span style={{ display: "inline-block", lineHeight: "1.9" }}>
     {tokens.map((t, i) =>
-      wrongIdxs.includes(i) ? (
-        <span key={i} className="word-bad">{t}</span>
-      ) : (
-        <span key={i} className="word-ok">{t}</span>
-      )
+      wrongIdxs.includes(i)
+        ? <span key={i} className="word-bad">{t}</span>
+        : <span key={i} className="word-ok">{t}</span>
     )}
   </span>
 );
@@ -35,43 +39,36 @@ export default function Result() {
   const { state } = useLocation(); // { name?, day? }
   const [nameFilter, setNameFilter] = useState(state?.name || "");
   const [dayFilter, setDayFilter]   = useState(state?.day || "");
+  const [admin, setAdmin] = useState(isAdminSession());
 
-  // 기록 로드
   const allRecords = useMemo(() => {
     try { return JSON.parse(localStorage.getItem("records") || "[]"); }
     catch { return []; }
   }, []);
 
-  // 필터 옵션
-  const nameOptions = useMemo(() =>
-    Array.from(new Set(allRecords.map(r => r.name).filter(Boolean))).sort(),
+  const nameOptions = useMemo(
+    () => Array.from(new Set(allRecords.map(r => r.name).filter(Boolean))).sort(),
     [allRecords]
   );
-  const dayOptions = useMemo(() =>
-    Array.from(new Set(allRecords.map(r => r.day).filter(Boolean))).sort(),
+  const dayOptions = useMemo(
+    () => Array.from(new Set(allRecords.map(r => r.day).filter(Boolean))).sort(),
     [allRecords]
   );
 
-  // 필터 적용
   const filtered = useMemo(() => {
-    const list = allRecords
+    return allRecords
       .filter(r => (nameFilter ? r.name === nameFilter : true))
       .filter(r => (dayFilter ? r.day === dayFilter : true))
       .sort((a, b) => b.ts - a.ts);
-    return list;
   }, [allRecords, nameFilter, dayFilter]);
 
-  // “선생님 입장 남은 오답” 계산:
-  // 같은 QID가 여러 기록에 있어도, “통과 성공”이면 오답 목록에서 제외.
   const remainingWrong = useMemo(() => {
     if (!nameFilter || !dayFilter) return [];
-    // 그 Day의 전체 문항 QID 목록
     const qs = (QUESTIONS[dayFilter] || []);
     const qidSet = new Set(qs.map(q => q.id));
-    // 해당 학생/Day의 “마스터되지 않은” QID만 남김
-    const notMasteredQids = Array.from(qidSet).filter(qid => !isMastered(nameFilter, dayFilter, qid));
 
-    // 그 QID들에 대한 최근 기록(있을 수도/없을 수도)
+    const notMasteredQids = [...qidSet].filter(qid => !isMastered(nameFilter, dayFilter, qid));
+
     const latestByQid = {};
     filtered.forEach(r => {
       if (r.day !== dayFilter || r.name !== nameFilter) return;
@@ -79,80 +76,77 @@ export default function Result() {
       if (!latestByQid[r.qid] || r.ts > latestByQid[r.qid].ts) latestByQid[r.qid] = r;
     });
 
-    // 아직 마스터 안 된 QID만 보여주기
-    const items = notMasteredQids.map(qid => {
-      const rec = latestByQid[qid];
-      if (rec) return rec; // 최근 기록이 있으면 그걸 사용(오답 표시 가능)
-      // 기록이 없다면 문제 원본만 준비
-      const q = qs.find(qq => qq.id === qid);
-      return q
-        ? {
-            name: nameFilter,
-            day: dayFilter,
-            qid,
-            koChunks: q.koChunks,
-            enChunks: q.enChunks,
-            wrongIdxs: q.enChunks.map(()=>0), // 표시용
-            score: 0,
-            totalChunks: q.enChunks.join(" ").trim().split(/\s+/).length,
-            user: "",
-            ts: 0,
-          }
-        : null;
-    }).filter(Boolean);
-
-    return items;
+    return notMasteredQids
+      .map(qid => latestByQid[qid] || (() => {
+        const q = qs.find(qq => qq.id === qid);
+        if (!q) return null;
+        return {
+          name: nameFilter, day: dayFilter, qid,
+          koChunks: q.koChunks, enChunks: q.enChunks,
+          wrongIdxs: q.enChunks.map(() => 0),
+          score: 0, totalChunks: q.enChunks.join(" ").trim().split(/\s+/).length,
+          user: "", ts: 0
+        };
+      })())
+      .filter(Boolean);
   }, [filtered, nameFilter, dayFilter]);
 
-  // 통과률/배지
   const masteryInfo = useMemo(() => {
     if (!nameFilter || !dayFilter) return null;
     const qs = QUESTIONS[dayFilter] || [];
     const total = qs.length;
     const mastered = qs.filter(q => isMastered(nameFilter, dayFilter, q.id)).length;
-    const left = Math.max(total - mastered, 0);
     const pct = total ? Math.round((mastered / total) * 100) : 0;
-    return { mastered, total, left, pct, done: total > 0 && mastered === total };
+    return { mastered, total, left: Math.max(total - mastered, 0), pct, done: total > 0 && mastered === total };
   }, [nameFilter, dayFilter]);
 
-  // 오답만 다시 말하기 (남은 오답 QID 기준)
+  // 관리자 인증
+  const ensureAdmin = () => {
+    if (admin) return true;
+    const pin = window.prompt("관리자 PIN을 입력하세요:");
+    if (pin === ADMIN_PIN) {
+      setAdmin(true);
+      setAdminSession(true);
+      return true;
+    }
+    if (pin !== null) alert("PIN이 올바르지 않습니다.");
+    return false;
+  };
+
+  // 삭제 동작들 (관리자만)
+  const deleteOne = (ts) => {
+    if (!ensureAdmin()) return;
+    const next = allRecords.filter((r) => r.ts !== ts);
+    localStorage.setItem("records", JSON.stringify(next));
+    window.location.reload();
+  };
+  const deleteFiltered = () => {
+    if (!ensureAdmin()) return;
+    if (!filtered.length) return;
+    if (!window.confirm(`필터된 ${filtered.length}개 기록을 삭제할까요?`)) return;
+    const del = new Set(filtered.map(r => r.ts));
+    const next = allRecords.filter(r => !del.has(r.ts));
+    localStorage.setItem("records", JSON.stringify(next));
+    window.location.reload();
+  };
+  const clearAll = () => {
+    if (!ensureAdmin()) return;
+    if (!window.confirm("모든 기록을 삭제할까요?")) return;
+    localStorage.removeItem("records");
+    window.location.reload();
+  };
+
   const retryWrong = () => {
-    if (!nameFilter || !dayFilter) {
-      alert("학생과 Day를 먼저 선택하세요.");
-      return;
-    }
-    if (!remainingWrong.length) {
-      alert("남은 오답이 없어요! (모두 통과)");
-      return;
-    }
-    // 남은 오답 QID → 원본 문제로 재구성
-    const retry = remainingWrong.map(r => {
-      const qq = (QUESTIONS[dayFilter] || []).find(x => x.id === r.qid);
-      return qq ? { ...qq } : null;
-    }).filter(Boolean);
-
+    if (!nameFilter || !dayFilter) { alert("학생과 Day를 먼저 선택하세요."); return; }
+    if (!remainingWrong.length) { alert("남은 오답이 없어요!"); return; }
+    const retry = remainingWrong
+      .map(r => (QUESTIONS[dayFilter] || []).find(x => x.id === r.qid))
+      .filter(Boolean)
+      .map(q => ({ ...q }));
     nav(`/exam/${dayFilter}`, {
-      state: {
-        name: nameFilter,
-        day: dayFilter,
-        date: new Date().toISOString().slice(0,10),
-        retry,
-      },
+      state: { name: nameFilter, day: dayFilter, date: new Date().toISOString().slice(0,10), retry }
     });
   };
-
-  // 개별 카드에서 해당 문제만 다시
-  const retryOne = (rec) => {
-    const q = (QUESTIONS[rec.day] || []).find(qq => qq.id === rec.qid);
-    if (!q) return alert("원본 문제를 찾지 못했어요.");
-    nav(`/exam/${rec.day}`, {
-      state: { name: rec.name, day: rec.day, date: rec.date, retry: [{ ...q }] },
-    });
-  };
-
-  // 점수 집계 (참고용)
-  const totalScore = filtered.reduce((s, r) => s + (r.score || 0), 0);
-  const totalChunks = filtered.reduce((s, r) => s + (r.totalChunks || 0), 0);
 
   return (
     <div className="container">
@@ -173,9 +167,18 @@ export default function Result() {
           </select>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={()=>nav("/")}>처음으로</button>
+
+          {/* 관리자 메뉴 */}
+          {!admin ? (
+            <button className="btn danger" onClick={ensureAdmin}>관리자 로그인</button>
+          ) : (
+            <button className="btn" onClick={()=>{ setAdmin(false); setAdminSession(false); }}>
+              로그아웃
+            </button>
+          )}
         </div>
 
-        {/* 상단 요약 / 배지 */}
+        {/* 요약/배지 + 남은 오답 */}
         {nameFilter && dayFilter && masteryInfo && (
           <div className="card" style={{ marginTop: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -183,10 +186,7 @@ export default function Result() {
                 {nameFilter} · {String(dayFilter).toUpperCase()}
               </div>
               <div className="muted">
-                통과 {masteryInfo.mastered}/{masteryInfo.total} (남은 오답 {masteryInfo.left})
-              </div>
-              <div className="muted">
-                진행률 {masteryInfo.pct}%
+                통과 {masteryInfo.mastered}/{masteryInfo.total} · 남은 오답 {masteryInfo.left} · 진행률 {masteryInfo.pct}%
               </div>
               {masteryInfo.done && (
                 <span style={{
@@ -202,16 +202,17 @@ export default function Result() {
               )}
               <div style={{ flex: 1 }} />
               <button className="btn success" onClick={retryWrong}>남은 오답만 다시</button>
+              {admin && (
+                <>
+                  <button className="btn danger" onClick={deleteFiltered}>필터된 기록 삭제</button>
+                  <button className="btn danger" onClick={clearAll}>전체 삭제</button>
+                </>
+              )}
             </div>
           </div>
         )}
 
-        {/* 필터된 기록(최근순) 간단 합계 */}
-        <div className="muted" style={{ marginTop: 10 }}>
-          (참고) 점수 합계: {totalScore} / {totalChunks}{totalChunks ? ` (${Math.round((totalScore/totalChunks)*100)}%)` : ""}
-        </div>
-
-        {/* 남은 오답 리스트 (선생님이 바로 확인) */}
+        {/* 남은 오답 리스트 */}
         {nameFilter && dayFilter && (
           <div className="card" style={{ marginTop: 12 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>
@@ -229,11 +230,15 @@ export default function Result() {
                     <div style={{ marginBottom: 6, fontWeight: 600 }}>
                       {r.koChunks?.join(" / ")}
                     </div>
-                    <div>
-                      <Tokens tokens={r.enChunks || []} wrongIdxs={r.wrongIdxs || []} />
-                    </div>
+                    <div><Tokens tokens={r.enChunks || []} wrongIdxs={r.wrongIdxs || []} /></div>
                     <div className="nav" style={{ marginTop: 8 }}>
-                      <button className="btn primary" onClick={()=>retryOne(r)}>이 문제 다시 말하기</button>
+                      <button className="btn primary" onClick={()=>{
+                        const q = (QUESTIONS[r.day] || []).find(qq=>qq.id===r.qid);
+                        if (!q) return alert("원본 문제를 찾지 못했어요.");
+                        nav(`/exam/${r.day}`, { state: { name: r.name, day: r.day, date: r.date, retry: [{...q}] }});
+                      }}>
+                        이 문제 다시 말하기
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -242,25 +247,59 @@ export default function Result() {
           </div>
         )}
 
-        {/* 일반 기록 리스트 (필터 반영, 최근순) */}
+        {/* 일반 기록 리스트 (개별 삭제는 '관리자'에게만 노출) */}
         <div style={{ marginTop: 12 }}>
           {!filtered.length ? (
             <div className="card">표시할 기록이 없어요.</div>
           ) : (
-            filtered.map((r) => (
-              <div key={r.ts} className="card" style={{ marginBottom: 10 }}>
-                <div className="muted" style={{ marginBottom: 6 }}>
-                  {r.name || "학생"} · {r.date} · {String(r.day).toUpperCase()} · Q{r.qid}
+            filtered.map((r) => {
+              const wrong = new Set(r.wrongIdxs || []);
+              return (
+                <div key={r.ts} className="card" style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div className="muted">
+                      {r.name || "학생"} · {r.date} · {String(r.day).toUpperCase()} · Q{r.qid}
+                    </div>
+                    <div>
+                      {r.score}/{r.totalChunks}{" "}
+                      <span style={{ color: wrong.size ? "#ff6b6b" : "#22c55e", fontWeight: 700 }}>
+                        {wrong.size ? "오답" : "정답"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 14, marginBottom: 6, opacity: 0.85 }}>
+                    {r.koChunks?.join(" / ")}
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {(r.enChunks || []).map((w, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: 8,
+                          border: "1px solid",
+                          borderColor: wrong.has(idx) ? "#ff6b6b" : "#22c55e",
+                        }}
+                      >
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    학생 답안: {r.user}
+                  </div>
+
+                  {admin && (
+                    <div className="row" style={{ justifyContent: "flex-end", marginTop: 8 }}>
+                      <button className="btn danger" onClick={() => deleteOne(r.ts)}>삭제</button>
+                    </div>
+                  )}
                 </div>
-                <div style={{ marginBottom: 6, fontWeight: 600 }}>
-                  {r.koChunks?.join(" / ")}
-                </div>
-                <Tokens tokens={r.enChunks || []} wrongIdxs={r.wrongIdxs || []} />
-                <div className="muted" style={{ marginTop: 6 }}>
-                  점수 {r.score}/{r.totalChunks}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
