@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
+// 정규화 함수 (소문자, 불필요한 기호 제거)
 const norm = (s) =>
   s
     .toLowerCase()
@@ -33,6 +34,21 @@ export default function Exam() {
     );
   }
 
+  // 🎤 음성 인식 (Web Speech API)
+  const handleSpeak = () => {
+    if (!("webkitSpeechRecognition" in window)) {
+      alert("이 브라우저에서는 음성 인식을 지원하지 않아요.");
+      return;
+    }
+    const recog = new window.webkitSpeechRecognition();
+    recog.lang = "en-US";
+    recog.onresult = (e) => {
+      setAns(e.results[0][0].transcript);
+    };
+    recog.start();
+  };
+
+  // 채점
   const handleCheck = () => {
     const userTokens = tokenize(ans);
     const expectedTokens = tokenize(q.enChunks.join(" "));
@@ -41,7 +57,7 @@ export default function Exam() {
     expectedTokens.forEach((exp, i) => {
       const user = userTokens[i] || "";
       if (user === exp) return; // 정확히 같음
-      if (user + "s" === exp || user === exp + "s") return; // 복수형 차이 허용
+      if (user + "s" === exp || user === exp + "s") return; // 복수형 허용
       wrongIdxs.push(i); // 오답
     });
 
@@ -84,6 +100,7 @@ export default function Exam() {
           rows={3}
         />
         <div className="nav">
+          <button className="btn" onClick={handleSpeak}>말하기</button>
           <button className="btn primary" onClick={handleCheck}>채점하기</button>
           <button className="btn" onClick={() => setAns(q.full)}>정답 넣기</button>
         </div>
