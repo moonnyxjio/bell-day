@@ -3,253 +3,265 @@ import React, { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
-function uniq(arr) {
-  return Array.from(new Set(arr));
-}
+// ----- 통과(마스터) 저장소 -----
+const MASTER_KEY = "mastery_v1";
+const loadMastery = () => {
+  try { return JSON.parse(localStorage.getItem(MASTER_KEY) || "{}"); }
+  catch { return {}; }
+};
+const isMastered = (name, day, qid) => {
+  const db = loadMastery();
+  const keyName = name || "_anon";
+  const keyDay = day || "_day";
+  const arr = db[keyName]?.[keyDay] || [];
+  return arr.includes(qid);
+};
 
-function loadRecords() {
-  try {
-    return JSON.parse(localStorage.getItem("records") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveRecords(list) {
-  localStorage.setItem("records", JSON.stringify(list));
-}
+// ----- UI 토큰 렌더 -----
+const Tokens = ({ tokens, wrongIdxs }) => (
+  <span style={{ display: "inline-block", lineHeight: "1.9" }}>
+    {tokens.map((t, i) =>
+      wrongIdxs.includes(i) ? (
+        <span key={i} className="word-bad">{t}</span>
+      ) : (
+        <span key={i} className="word-ok">{t}</span>
+      )
+    )}
+  </span>
+);
 
 export default function Result() {
   const nav = useNavigate();
-  const loc = useLocation();
-  const navState = loc.state || {};
+  const { state } = useLocation(); // { name?, day? }
+  const [nameFilter, setNameFilter] = useState(state?.name || "");
+  const [dayFilter, setDayFilter]   = useState(state?.day || "");
 
-  // 전체 기록 로드
-  const [records, setRecords] = useState(() => loadRecords());
-
-  // 필터 상태
-  const [nameFilter, setNameFilter] = useState(navState.name || "");
-  const [dayFilter, setDayFilter] = useState(navState.day || "");
+  // 기록 로드
+  const allRecords = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("records") || "[]"); }
+    catch { return []; }
+  }, []);
 
   // 필터 옵션
-  const nameOptions = useMemo(
-    () => uniq(records.map((r) => r.name).filter(Boolean)).sort(),
-    [records]
+  const nameOptions = useMemo(() =>
+    Array.from(new Set(allRecords.map(r => r.name).filter(Boolean))).sort(),
+    [allRecords]
   );
-  const dayOptions = useMemo(
-    () => uniq(records.map((r) => r.day).filter(Boolean)).sort(),
-    [records]
+  const dayOptions = useMemo(() =>
+    Array.from(new Set(allRecords.map(r => r.day).filter(Boolean))).sort(),
+    [allRecords]
   );
 
   // 필터 적용
   const filtered = useMemo(() => {
-    return records
-      .filter((r) => (nameFilter ? r.name === nameFilter : true))
-      .filter((r) => (dayFilter ? r.day === dayFilter : true))
+    const list = allRecords
+      .filter(r => (nameFilter ? r.name === nameFilter : true))
+      .filter(r => (dayFilter ? r.day === dayFilter : true))
       .sort((a, b) => b.ts - a.ts);
-  }, [records, nameFilter, dayFilter]);
+    return list;
+  }, [allRecords, nameFilter, dayFilter]);
 
-  const totalScore = filtered.reduce((s, r) => s + (r.score || 0), 0);
-  const totalChunks = filtered.reduce((s, r) => s + (r.totalChunks || 0), 0);
+  // “선생님 입장 남은 오답” 계산:
+  // 같은 QID가 여러 기록에 있어도, “통과 성공”이면 오답 목록에서 제외.
+  const remainingWrong = useMemo(() => {
+    if (!nameFilter || !dayFilter) return [];
+    // 그 Day의 전체 문항 QID 목록
+    const qs = (QUESTIONS[dayFilter] || []);
+    const qidSet = new Set(qs.map(q => q.id));
+    // 해당 학생/Day의 “마스터되지 않은” QID만 남김
+    const notMasteredQids = Array.from(qidSet).filter(qid => !isMastered(nameFilter, dayFilter, qid));
 
-  // 개별 토글 상태 (정답 보기)
-  const [openIds, setOpenIds] = useState({}); // key: ts or index
-
-  const toggleOpen = (key) =>
-    setOpenIds((p) => ({ ...p, [key]: !p[key] }));
-
-  // 개별 삭제
-  const removeOne = (ts) => {
-    const next = records.filter((r) => r.ts !== ts);
-    setRecords(next);
-    saveRecords(next);
-  };
-
-  // 전체 삭제
-  const clearAll = () => {
-    if (!window.confirm("정말 전체 기록을 삭제할까요?")) return;
-    setRecords([]);
-    saveRecords([]);
-  };
-
-  // Day + (선택된) 학생 기준으로 '틀린 문제만 다시 말하기'
-  const retryWrongFiltered = () => {
-    if (!dayFilter) {
-      alert("Day를 선택해야 해요. (필터에서 Day 선택)");
-      return;
-    }
-    const wrongRecs = filtered.filter((r) => (r.wrongIdxs || []).length > 0 && r.day === dayFilter);
-    if (wrongRecs.length === 0) {
-      alert("틀린 문제가 없어요!");
-      return;
-    }
-    // qid 기준으로 중복 제거
-    const uniqueByQid = {};
-    wrongRecs.forEach((r) => {
-      uniqueByQid[r.qid] = r;
+    // 그 QID들에 대한 최근 기록(있을 수도/없을 수도)
+    const latestByQid = {};
+    filtered.forEach(r => {
+      if (r.day !== dayFilter || r.name !== nameFilter) return;
+      if (!qidSet.has(r.qid)) return;
+      if (!latestByQid[r.qid] || r.ts > latestByQid[r.qid].ts) latestByQid[r.qid] = r;
     });
-    const uniqList = Object.values(uniqueByQid);
 
-    // 원본 문제 복구
-    const retry = uniqList
-      .map((r) => {
-        const q = (QUESTIONS[r.day] || []).find((qq) => qq.id === r.qid);
-        return q ? { ...q } : null;
-      })
-      .filter(Boolean);
+    // 아직 마스터 안 된 QID만 보여주기
+    const items = notMasteredQids.map(qid => {
+      const rec = latestByQid[qid];
+      if (rec) return rec; // 최근 기록이 있으면 그걸 사용(오답 표시 가능)
+      // 기록이 없다면 문제 원본만 준비
+      const q = qs.find(qq => qq.id === qid);
+      return q
+        ? {
+            name: nameFilter,
+            day: dayFilter,
+            qid,
+            koChunks: q.koChunks,
+            enChunks: q.enChunks,
+            wrongIdxs: q.enChunks.map(()=>0), // 표시용
+            score: 0,
+            totalChunks: q.enChunks.join(" ").trim().split(/\s+/).length,
+            user: "",
+            ts: 0,
+          }
+        : null;
+    }).filter(Boolean);
+
+    return items;
+  }, [filtered, nameFilter, dayFilter]);
+
+  // 통과률/배지
+  const masteryInfo = useMemo(() => {
+    if (!nameFilter || !dayFilter) return null;
+    const qs = QUESTIONS[dayFilter] || [];
+    const total = qs.length;
+    const mastered = qs.filter(q => isMastered(nameFilter, dayFilter, q.id)).length;
+    const left = Math.max(total - mastered, 0);
+    const pct = total ? Math.round((mastered / total) * 100) : 0;
+    return { mastered, total, left, pct, done: total > 0 && mastered === total };
+  }, [nameFilter, dayFilter]);
+
+  // 오답만 다시 말하기 (남은 오답 QID 기준)
+  const retryWrong = () => {
+    if (!nameFilter || !dayFilter) {
+      alert("학생과 Day를 먼저 선택하세요.");
+      return;
+    }
+    if (!remainingWrong.length) {
+      alert("남은 오답이 없어요! (모두 통과)");
+      return;
+    }
+    // 남은 오답 QID → 원본 문제로 재구성
+    const retry = remainingWrong.map(r => {
+      const qq = (QUESTIONS[dayFilter] || []).find(x => x.id === r.qid);
+      return qq ? { ...qq } : null;
+    }).filter(Boolean);
 
     nav(`/exam/${dayFilter}`, {
       state: {
-        name: nameFilter || uniqList[0]?.name || "",
-        date: new Date().toISOString().slice(0, 10),
+        name: nameFilter,
         day: dayFilter,
+        date: new Date().toISOString().slice(0,10),
         retry,
       },
     });
   };
 
-  // 단일 문제 다시 말하기
+  // 개별 카드에서 해당 문제만 다시
   const retryOne = (rec) => {
-    const q = (QUESTIONS[rec.day] || []).find((qq) => qq.id === rec.qid);
-    if (!q) {
-      alert("원본 문제를 찾지 못했어요.");
-      return;
-    }
+    const q = (QUESTIONS[rec.day] || []).find(qq => qq.id === rec.qid);
+    if (!q) return alert("원본 문제를 찾지 못했어요.");
     nav(`/exam/${rec.day}`, {
-      state: {
-        name: rec.name,
-        date: rec.date,
-        day: rec.day,
-        retry: [{ ...q }],
-      },
+      state: { name: rec.name, day: rec.day, date: rec.date, retry: [{ ...q }] },
     });
   };
 
-  // UI: 토큰 컬러링
-  const renderAnswerTokens = (rec) => {
-    return rec.enChunks.map((tok, i) =>
-      rec.wrongIdxs.includes(i) ? (
-        <span key={i} className="word-bad">{tok}</span>
-      ) : (
-        <span key={i} className="word-ok">{tok}</span>
-      )
-    );
-  };
+  // 점수 집계 (참고용)
+  const totalScore = filtered.reduce((s, r) => s + (r.score || 0), 0);
+  const totalChunks = filtered.reduce((s, r) => s + (r.totalChunks || 0), 0);
 
   return (
     <div className="container">
-      <div className="card" style={{ maxWidth: 960 }}>
-        <h1 className="title">결과</h1>
-        <p className="subtitle">
-          {nameFilter ? `${nameFilter} | ` : ""}
-          {dayFilter ? `DAY${dayFilter.replace("day", "")}` : ""}
-        </p>
+      <div className="card" style={{ maxWidth: 980 }}>
+        <h1 className="title">결과 (선생님용)</h1>
 
-        <div className="row" style={{ marginTop: 8 }}>
-          {/* 이름 필터 */}
-          <select
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #444", background: "#111", color: "#fff" }}
-          >
+        {/* 필터 */}
+        <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+          <select value={nameFilter} onChange={(e)=>setNameFilter(e.target.value)}
+            style={{ padding: 10, borderRadius: 8, border: "1px solid #444", background: "#111", color: "#fff" }}>
             <option value="">학생 전체</option>
-            {nameOptions.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
+            {nameOptions.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
-
-          {/* Day 필터 */}
-          <select
-            value={dayFilter}
-            onChange={(e) => setDayFilter(e.target.value)}
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #444", background: "#111", color: "#fff" }}
-          >
+          <select value={dayFilter} onChange={(e)=>setDayFilter(e.target.value)}
+            style={{ padding: 10, borderRadius: 8, border: "1px solid #444", background: "#111", color: "#fff" }}>
             <option value="">Day 전체</option>
-            {dayOptions.map((d) => (
-              <option key={d} value={d}>{d.toUpperCase()}</option>
-            ))}
+            {dayOptions.map(d => <option key={d} value={d}>{String(d).toUpperCase()}</option>)}
           </select>
-
-          <button className="btn" onClick={() => { setNameFilter(""); setDayFilter(""); }}>
-            필터 초기화
-          </button>
-
-          <button className="btn danger" onClick={clearAll}>
-            전체 기록 삭제
-          </button>
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={()=>nav("/")}>처음으로</button>
         </div>
 
-        <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn success" onClick={retryWrongFiltered}>
-            (필터된) 틀린 문제만 다시 말하기
-          </button>
-          <button className="btn" onClick={() => nav("/")}>처음으로</button>
-        </div>
-
-        <div style={{ marginTop: 16 }} className="muted">
-          점수 합계: {totalScore} / {totalChunks}{" "}
-          {totalChunks ? `(${Math.round((totalScore / totalChunks) * 100)}%)` : ""}
-        </div>
-
-        {/* 세로 리스트 */}
-        <div style={{ marginTop: 16 }}>
-          {filtered.length === 0 && <p className="muted">표시할 기록이 없어요.</p>}
-
-          {filtered.map((r, i) => {
-            const key = r.ts || i;
-            const opened = !!openIds[key];
-            return (
-              <div
-                key={key}
-                style={{
-                  border: "1px solid #333",
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 12,
-                  background: "#0d0f14",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>
-                      {r.name || "학생"} · {r.date} · {r.day.toUpperCase()} · Q{r.qid}
-                    </div>
-                    <div>
-                      점수: <b>{r.score}</b> / {r.totalChunks}{" "}
-                      {r.totalChunks ? `(${Math.round((r.score / r.totalChunks) * 100)}%)` : ""}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn" onClick={() => toggleOpen(key)}>
-                      {opened ? "정답 감추기" : "정답 보기"}
-                    </button>
-                    <button className="btn primary" onClick={() => retryOne(r)}>
-                      이 문제 다시 말하기
-                    </button>
-                    <button className="btn danger" onClick={() => removeOne(r.ts)}>
-                      삭제
-                    </button>
-                  </div>
-                </div>
-
-                {opened && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ marginBottom: 6 }}>
-                      <div className="muted">정답 문장:</div>
-                      <div style={{ lineHeight: "2.0" }}>{renderAnswerTokens(r)}</div>
-                    </div>
-                    <div>
-                      <div className="muted">학생 답안:</div>
-                      <div style={{ border: "1px solid #333", padding: "8px 12px", borderRadius: 8 }}>
-                        {r.user || ""}
-                      </div>
-                    </div>
-                  </div>
-                )}
+        {/* 상단 요약 / 배지 */}
+        {nameFilter && dayFilter && masteryInfo && (
+          <div className="card" style={{ marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 700 }}>
+                {nameFilter} · {String(dayFilter).toUpperCase()}
               </div>
-            );
-          })}
+              <div className="muted">
+                통과 {masteryInfo.mastered}/{masteryInfo.total} (남은 오답 {masteryInfo.left})
+              </div>
+              <div className="muted">
+                진행률 {masteryInfo.pct}%
+              </div>
+              {masteryInfo.done && (
+                <span style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  background: "#22c55e22",
+                  border: "1px solid #22c55e",
+                  color: "#22c55e",
+                  fontWeight: 700
+                }}>
+                  ✅ DAY 완료 배지
+                </span>
+              )}
+              <div style={{ flex: 1 }} />
+              <button className="btn success" onClick={retryWrong}>남은 오답만 다시</button>
+            </div>
+          </div>
+        )}
+
+        {/* 필터된 기록(최근순) 간단 합계 */}
+        <div className="muted" style={{ marginTop: 10 }}>
+          (참고) 점수 합계: {totalScore} / {totalChunks}{totalChunks ? ` (${Math.round((totalScore/totalChunks)*100)}%)` : ""}
+        </div>
+
+        {/* 남은 오답 리스트 (선생님이 바로 확인) */}
+        {nameFilter && dayFilter && (
+          <div className="card" style={{ marginTop: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              남은 오답 목록 ({remainingWrong.length}개)
+            </div>
+            {remainingWrong.length === 0 ? (
+              <div className="muted">남은 오답이 없어요.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {remainingWrong.map((r) => (
+                  <div key={r.qid} style={{ border: "1px solid #333", borderRadius: 10, padding: 10 }}>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      Q{r.qid} · {String(r.day).toUpperCase()} · {r.name}
+                    </div>
+                    <div style={{ marginBottom: 6, fontWeight: 600 }}>
+                      {r.koChunks?.join(" / ")}
+                    </div>
+                    <div>
+                      <Tokens tokens={r.enChunks || []} wrongIdxs={r.wrongIdxs || []} />
+                    </div>
+                    <div className="nav" style={{ marginTop: 8 }}>
+                      <button className="btn primary" onClick={()=>retryOne(r)}>이 문제 다시 말하기</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 일반 기록 리스트 (필터 반영, 최근순) */}
+        <div style={{ marginTop: 12 }}>
+          {!filtered.length ? (
+            <div className="card">표시할 기록이 없어요.</div>
+          ) : (
+            filtered.map((r) => (
+              <div key={r.ts} className="card" style={{ marginBottom: 10 }}>
+                <div className="muted" style={{ marginBottom: 6 }}>
+                  {r.name || "학생"} · {r.date} · {String(r.day).toUpperCase()} · Q{r.qid}
+                </div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>
+                  {r.koChunks?.join(" / ")}
+                </div>
+                <Tokens tokens={r.enChunks || []} wrongIdxs={r.wrongIdxs || []} />
+                <div className="muted" style={{ marginTop: 6 }}>
+                  점수 {r.score}/{r.totalChunks}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
