@@ -45,7 +45,7 @@ export default function Start() {
   return (
     <div className="container">
       <div className="card" style={{ width: "100%", maxWidth: 640 }}>
-        <h1 className="title">Who’s going to bell the cat?</h1>
+        <h1 className="title">A naughty spell for naughty boys</h1>
         <p className="subtitle">말하기 시험 · 오답 재시험 · 뱃지</p>
 
         <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
