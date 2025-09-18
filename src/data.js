@@ -27,7 +27,7 @@ export const QUESTIONS = {
     },
     {
       id: 4,
-      koChunks: ["그들은", "이다 항상", "배고픈],
+      koChunks: ["그들은", "이다 항상", "배고픈"],
       enChunks: ["They", "are always", "hungry"],
       full: "They are always hungry.",
     },
