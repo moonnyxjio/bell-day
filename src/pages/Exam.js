@@ -3,7 +3,6 @@ import React, { useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
-// 정규화 함수
 const norm = (s) =>
   s
     .toLowerCase()
@@ -11,7 +10,6 @@ const norm = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
-// 단어 토큰화
 const tokenize = (s) => norm(s).split(" ").filter(Boolean);
 
 export default function Exam() {
@@ -19,10 +17,15 @@ export default function Exam() {
   const { day } = useParams();
   const { state } = useLocation();
   const [idx, setIdx] = useState(0);
-  const [ans, setAns] = useState("");
-  const [feedback, setFeedback] = useState(null);
+  const [recognized, setRecognized] = useState(""); // 말하기 인식된 결과
+  const [feedback, setFeedback] = useState(null);   // 채점 결과
 
-  const list = useMemo(() => QUESTIONS[day] || [], [day]);
+  // retry 모드 (틀린 문제만 다시) 있으면 그걸로, 아니면 일반 Day 문제로
+  const list = useMemo(() => {
+    if (state?.retry) return state.retry;
+    return QUESTIONS[day] || [];
+  }, [day, state]);
+
   const q = list[idx];
 
   if (!q) {
@@ -35,34 +38,36 @@ export default function Exam() {
     );
   }
 
-  // --- 음성 인식 ---
+  // 말하기 인식 (간단 버전: 브라우저 SpeechRecognition API)
   const handleSpeak = () => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("이 브라우저는 음성 인식을 지원하지 않습니다.");
       return;
     }
-    const recog = new SpeechRecognition();
-    recog.lang = "en-US";
-    recog.onresult = (e) => {
-      const spoken = e.results[0][0].transcript;
-      setAns(spoken);
-      checkAnswer(spoken);
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setRecognized(text);
+      handleCheck(text);
     };
-    recog.start();
+    rec.start();
   };
 
-  // --- 채점 로직 ---
-  const checkAnswer = (spoken) => {
-    const userTokens = tokenize(spoken);
+  // 채점
+  const handleCheck = (ans) => {
+    const userTokens = tokenize(ans);
     const expectedTokens = tokenize(q.enChunks.join(" "));
 
     const wrongIdxs = [];
     expectedTokens.forEach((exp, i) => {
       const user = userTokens[i] || "";
       if (user === exp) return;
-      if (user + "s" === exp || user === exp + "s") return;
+      if (user + "s" === exp || user === exp + "s") return; // 복수형 허용
       wrongIdxs.push(i);
     });
 
@@ -76,64 +81,60 @@ export default function Exam() {
       koChunks: q.koChunks,
       enChunks: expectedTokens,
       full: q.full,
-      user: spoken,
+      user: ans,
       wrongIdxs,
       totalChunks: expectedTokens.length,
       score,
       ts: Date.now(),
     };
+
     const prev = JSON.parse(localStorage.getItem("records") || "[]");
     localStorage.setItem("records", JSON.stringify([...prev, rec]));
 
-    // 피드백 표시 (색상 하이라이트)
-    const highlighted = expectedTokens.map((tok, i) =>
-      wrongIdxs.includes(i) ? (
-        <span key={i} style={{ color: "red" }}>
-          {tok + " "}
-        </span>
-      ) : (
-        <span key={i} style={{ color: "lightgreen" }}>
-          {tok + " "}
-        </span>
-      )
-    );
-    setFeedback(
-      <div className="feedback">
-        <p>
-          정답 문장: <strong>{highlighted}</strong>
-        </p>
-        <p>학생 답안: {spoken}</p>
-        <p>
-          점수: {score} / {expectedTokens.length}
-        </p>
-      </div>
-    );
+    setFeedback(rec);
 
-    // 잠깐 보여주고 자동으로 다음 문제
     setTimeout(() => {
-      setFeedback(null);
       if (idx < list.length - 1) {
-        setAns("");
+        setRecognized("");
+        setFeedback(null);
         setIdx(idx + 1);
       } else {
         nav("/result", { state: { name: rec.name, date: rec.date, day } });
       }
-    }, 3000);
+    }, 2500); // 2.5초 후 자동 다음 문제
   };
 
   return (
     <div className="container">
       <div className="card">
-        <h1 className="title">
-          문제 {idx + 1} / {list.length}
-        </h1>
+        <h1 className="title">문제 {idx + 1} / {list.length}</h1>
         <p className="yellow">{q.koChunks.join(" / ")}</p>
-        <div className="nav">
-          <button className="btn primary" onClick={handleSpeak}>
-            말하기
-          </button>
+
+        <div className="speech-box">
+          <button className="btn primary" onClick={handleSpeak}>말하기</button>
         </div>
-        {feedback && <div className="result-box">{feedback}</div>}
+
+        {recognized && (
+          <div style={{ marginTop: 20 }}>
+            <p>🗣 인식된 문장: {recognized}</p>
+          </div>
+        )}
+
+        {feedback && (
+          <div style={{ marginTop: 20 }}>
+            <p>
+              정답:{" "}
+              {feedback.enChunks.map((tok, i) =>
+                feedback.wrongIdxs.includes(i) ? (
+                  <span key={i} style={{ color: "red", marginRight: 4 }}>{tok}</span>
+                ) : (
+                  <span key={i} style={{ color: "green", marginRight: 4 }}>{tok}</span>
+                )
+              )}
+            </p>
+            <p>점수: {feedback.score} / {feedback.totalChunks}</p>
+          </div>
+        )}
       </div>
     </div>
   );
