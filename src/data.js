@@ -27,7 +27,7 @@ export const QUESTIONS = {
     },
     {
       id: 4,
-      koChunks: ["그들은", "항상", "배고프다"],
+      koChunks: ["그들은", "이다 항상", "배고픈],
       enChunks: ["They", "are always", "hungry"],
       full: "They are always hungry.",
     },
@@ -39,19 +39,19 @@ export const QUESTIONS = {
     },
     {
       id: 6,
-      koChunks: ["그 고양이는", "항상", "배고프다"],
+      koChunks: ["그 고양이는", "이다 항상", "배고픈"],
       enChunks: ["The cat", "is always", "hungry"],
       full: "The cat is always hungry.",
     },
     {
       id: 7,
-      koChunks: ["그 고양이는", "쥐들을", "좋아한다"],
+      koChunks: ["그 고양이는", "먹기를 좋아한다", "쥐들을"],
       enChunks: ["The cat", "likes to eat", "mice"],
       full: "The cat likes to eat mice.",
     },
     {
       id: 8,
-      koChunks: ["그 고양이는", "항상 기다린다", "쥐들을 위해", "그 구멍 앞에서"],
+      koChunks: ["그 고양이는", "항상 기다린다", "쥐들을", "그 구멍 앞에서"],
       enChunks: ["The cat", "always waits", "for the mice", "in front of the hole"],
       full: "The cat always waits for the mice in front of the hole.",
     },
@@ -141,7 +141,7 @@ export const QUESTIONS = {
     },
     {
       id: 6,
-      koChunks: ["그 쥐 가족이", "회의를", "한다"],
+      koChunks: ["그 쥐 가족이", "가진다", "회의를"],
       enChunks: ["The mouse family", "has", "a meeting"],
       full: "The mouse family has a meeting.",
     },
@@ -162,7 +162,7 @@ export const QUESTIONS = {
   day4: [
     {
       id: 1,
-      koChunks: ["“어떻겠니", "우리가 묶는다면", "종을", "그 고양이 목에”", "라고", "말한다", "자매쥐가"],
+      koChunks: ["“어떻겠니", "우리가 묶는다면", "종을", "그 고양이의 목에”", "말한다", "자매쥐가"],
       enChunks: ["“How about", "we tie", "a bell", "around the cat’s neck”", "says", "Sister Mouse"],
       full: "“How about we tie a bell around the cat’s neck?” says Sister Mouse.",
     },
@@ -174,8 +174,8 @@ export const QUESTIONS = {
     },
     {
       id: 3,
-      koChunks: ["그들은", "매우", "흥분한다"],
-      enChunks: ["They", "are very", "excited"],
+      koChunks: ["그들은", "이다", "매우", "흥분한"],
+      enChunks: ["They", "are", "very", "excited"],
       full: "They are very excited.",
     },
     {
@@ -210,8 +210,8 @@ export const QUESTIONS = {
     },
     {
       id: 9,
-      koChunks: ["“그래서 누가", "할 거냐", "그 고양이에 방울을 다는 걸?”", "묻는다", "할아버지쥐가"],
-      enChunks: ["“So who", "is going to", "bell the cat?”", "asks", "Grandpa Mouse"],
+      koChunks: ["“그래서", "누가", "할 거냐", "그 고양이에 방울을 다는 걸?”", "묻는다", "할아버지쥐가"],
+      enChunks: ["“So", "who", "is going to", "bell the cat?”", "asks", "Grandpa Mouse"],
       full: "“So who is going to bell the cat?” asks Grandpa Mouse.",
     },
     {
@@ -222,13 +222,13 @@ export const QUESTIONS = {
     },
     {
       id: 11,
-      koChunks: ["그들은", "눈을 깜빡이고", "서로를", "바라본다"],
+      koChunks: ["그들은", "그들의 눈을 깜빡이고", "그리고", "서로를 연구한다"],
       enChunks: ["They", "blink their eyes", "and", "study each other"],
       full: "They blink their eyes and study each other.",
     },
     {
       id: 12,
-      koChunks: ["그들은", "한숨짓고", "또 한숨짓는다"],
+      koChunks: ["그들은", "한숨짓고", "그리고 한숨짓는다"],
       enChunks: ["They", "sigh", "and sigh"],
       full: "They sigh and sigh.",
     },
