@@ -1,5 +1,5 @@
 // src/pages/Exam.js
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
@@ -18,10 +18,24 @@ export default function Exam() {
   const { state } = useLocation();
   const [idx, setIdx] = useState(0);
   const [ans, setAns] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
 
   const list = useMemo(() => QUESTIONS[day] || [], [day]);
   const q = list[idx];
+
+  // 🎤 브라우저에서 음성인식 가능한지 확인
+  useEffect(() => {
+    if ("webkitSpeechRecognition" in window) {
+      setSpeechSupported(true);
+    }
+  }, []);
+
+  // 문제 없을 때 처리
+  useEffect(() => {
+    if (!q) {
+      console.log("문제가 없습니다.");
+    }
+  }, [q]);
 
   if (!q) {
     return (
@@ -33,28 +47,26 @@ export default function Exam() {
     );
   }
 
-  // 🎤 Speech-to-Text
-  useEffect(() => {
-    let recognition;
-    if ("webkitSpeechRecognition" in window) {
-      recognition = new window.webkitSpeechRecognition();
-      recognition.lang = "en-US";
-      recognition.interimResults = false;
-
-      recognition.onresult = (event) => {
-        const spoken = event.results[0][0].transcript;
-        setAns(spoken);
-        handleCheck(spoken); // 자동 채점
-      };
-
-      if (isRecording) recognition.start();
-      else recognition.stop();
+  // 🎤 말하기 시작
+  const handleSpeak = () => {
+    if (!speechSupported) {
+      alert("이 브라우저는 음성 인식을 지원하지 않아요.");
+      return;
     }
-    return () => recognition && recognition.stop();
-  }, [isRecording]);
 
-  const handleCheck = (answer = ans) => {
-    const userTokens = tokenize(answer);
+    const recog = new window.webkitSpeechRecognition();
+    recog.lang = "en-US";
+    recog.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setAns(transcript);
+      handleCheck(transcript); // 말하기 후 자동 채점
+    };
+    recog.start();
+  };
+
+  // 채점 로직
+  const handleCheck = (answerText = ans) => {
+    const userTokens = tokenize(answerText);
     const expectedTokens = tokenize(q.enChunks.join(" "));
 
     const wrongIdxs = [];
@@ -70,13 +82,12 @@ export default function Exam() {
     const rec = {
       name: state?.name || "",
       date: state?.date || new Date().toISOString().slice(0, 10),
-      mode: "SPEAK",
       day,
       qid: q.id,
       koChunks: q.koChunks,
       enChunks: expectedTokens,
       full: q.full,
-      user: answer,
+      user: answerText,
       wrongIdxs,
       totalChunks: expectedTokens.length,
       score,
@@ -101,14 +112,22 @@ export default function Exam() {
           문제 {idx + 1} / {list.length}
         </h1>
         <p className="yellow">{q.koChunks.join(" / ")}</p>
-        <p className="gray small">영어로 말하기</p>
+
+        <textarea
+          placeholder="영어로 문장을 쓰세요"
+          value={ans}
+          onChange={(e) => setAns(e.target.value)}
+          rows={3}
+        />
 
         <div className="nav">
-          <button
-            className={`btn ${isRecording ? "danger" : "primary"}`}
-            onClick={() => setIsRecording(!isRecording)}
-          >
-            {isRecording ? "⏹ 멈추기" : "🎤 말하기"}
+          {speechSupported && (
+            <button className="btn primary" onClick={handleSpeak}>
+              말하기
+            </button>
+          )}
+          <button className="btn" onClick={() => handleCheck()}>
+            채점하기
           </button>
         </div>
       </div>
