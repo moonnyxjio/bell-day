@@ -9,7 +9,13 @@ export default function Result() {
   const [records, setRecords] = useState([]);
 
   useEffect(() => {
-    const all = JSON.parse(localStorage.getItem("records") || "[]");
+    let all = [];
+    try {
+      all = JSON.parse(localStorage.getItem("records") || "[]");
+    } catch {
+      all = [];
+    }
+
     if (state?.name || state?.date || state?.day) {
       const filtered = all.filter((r) => {
         const okName = state?.name ? r.name === state.name : true;
@@ -31,13 +37,15 @@ export default function Result() {
     return { total: totalQuestions, sum: sumScore, chunks: sumChunks };
   }, [records]);
 
+  const dayText = state?.day ? String(state.day).toUpperCase() : "";
+
   return (
     <div className="container">
       <div className="card">
         <h1 className="title">결과</h1>
         {state?.name && (
           <div className="muted" style={{ marginBottom: 8 }}>
-            {state.name} · {state.date} · {state.day?.toUpperCase?.?.() || state.day}
+            {state.name} · {state.date} · {dayText}
           </div>
         )}
 
@@ -50,10 +58,7 @@ export default function Result() {
         </div>
 
         <div className="nav" style={{ marginTop: 12 }}>
-          <button
-            className="btn"
-            onClick={() => setShowWrongOnly((v) => !v)}
-          >
+          <button className="btn" onClick={() => setShowWrongOnly((v) => !v)}>
             {showWrongOnly ? "전체 보기" : "오답만 보기"}
           </button>
           <button className="btn primary" onClick={() => nav("/")}>
@@ -67,37 +72,39 @@ export default function Result() {
           기록이 없어요.
         </div>
       ) : (
-        records.map((r, i) => (
-          <div key={r.ts + "-" + i} className="card" style={{ marginTop: 12 }}>
-            <div className="muted" style={{ marginBottom: 6 }}>
-              {r.mode?.toUpperCase?.?.() || r.mode} · Day {r.day} · Q{r.qid} · {r.date}
+        records.map((r, i) => {
+          const modeLabel = (r.mode || "").toUpperCase();
+          return (
+            <div key={r.ts + "-" + i} className="card" style={{ marginTop: 12 }}>
+              <div className="muted" style={{ marginBottom: 6 }}>
+                {modeLabel} · Day {r.day} · Q{r.qid} · {r.date}
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                {r.enChunks.map((tok, idx) => {
+                  const wrong = r.wrongIdxs?.includes(idx);
+                  if (showWrongOnly && !wrong) return null;
+                  return (
+                    <span
+                      key={idx}
+                      className={wrong ? "word-bad" : "word-ok"}
+                      style={{ marginRight: 6 }}
+                    >
+                      {tok}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="muted">
+                점수: {r.score} / {r.totalChunks} (
+                {r.totalChunks ? Math.round((r.score / r.totalChunks) * 100) : 0}%)
+              </div>
+              <details style={{ marginTop: 6 }}>
+                <summary className="muted">내 답 보기</summary>
+                <div style={{ marginTop: 4 }}>{r.user}</div>
+              </details>
             </div>
-            <div style={{ marginBottom: 6 }}>
-              {/* 정답 토큰을 오답만 또는 전체로 표시 */}
-              {r.enChunks.map((tok, idx) => {
-                const wrong = r.wrongIdxs?.includes(idx);
-                if (showWrongOnly && !wrong) return null;
-                return (
-                  <span
-                    key={idx}
-                    className={wrong ? "word-bad" : "word-ok"}
-                    style={{ marginRight: 6 }}
-                  >
-                    {tok}
-                  </span>
-                );
-              })}
-            </div>
-            <div className="muted">
-              점수: {r.score} / {r.totalChunks} (
-              {r.totalChunks ? Math.round((r.score / r.totalChunks) * 100) : 0}%)
-            </div>
-            <details style={{ marginTop: 6 }}>
-              <summary className="muted">내 답 보기</summary>
-              <div style={{ marginTop: 4 }}>{r.user}</div>
-            </details>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
