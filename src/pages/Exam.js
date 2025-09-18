@@ -1,8 +1,9 @@
 // src/pages/Exam.js
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { QUESTIONS } from "../data";
 
+// 정규화 함수
 const norm = (s) =>
   s
     .toLowerCase()
@@ -10,6 +11,7 @@ const norm = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// 단어 토큰화
 const tokenize = (s) => norm(s).split(" ").filter(Boolean);
 
 export default function Exam() {
@@ -18,24 +20,10 @@ export default function Exam() {
   const { state } = useLocation();
   const [idx, setIdx] = useState(0);
   const [ans, setAns] = useState("");
-  const [speechSupported, setSpeechSupported] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
   const list = useMemo(() => QUESTIONS[day] || [], [day]);
   const q = list[idx];
-
-  // 🎤 브라우저에서 음성인식 가능한지 확인
-  useEffect(() => {
-    if ("webkitSpeechRecognition" in window) {
-      setSpeechSupported(true);
-    }
-  }, []);
-
-  // 문제 없을 때 처리
-  useEffect(() => {
-    if (!q) {
-      console.log("문제가 없습니다.");
-    }
-  }, [q]);
 
   if (!q) {
     return (
@@ -47,26 +35,27 @@ export default function Exam() {
     );
   }
 
-  // 🎤 말하기 시작
+  // --- 음성 인식 ---
   const handleSpeak = () => {
-    if (!speechSupported) {
-      alert("이 브라우저는 음성 인식을 지원하지 않아요.");
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("이 브라우저는 음성 인식을 지원하지 않습니다.");
       return;
     }
-
-    const recog = new window.webkitSpeechRecognition();
+    const recog = new SpeechRecognition();
     recog.lang = "en-US";
     recog.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      setAns(transcript);
-      handleCheck(transcript); // 말하기 후 자동 채점
+      const spoken = e.results[0][0].transcript;
+      setAns(spoken);
+      checkAnswer(spoken);
     };
     recog.start();
   };
 
-  // 채점 로직
-  const handleCheck = (answerText = ans) => {
-    const userTokens = tokenize(answerText);
+  // --- 채점 로직 ---
+  const checkAnswer = (spoken) => {
+    const userTokens = tokenize(spoken);
     const expectedTokens = tokenize(q.enChunks.join(" "));
 
     const wrongIdxs = [];
@@ -87,22 +76,49 @@ export default function Exam() {
       koChunks: q.koChunks,
       enChunks: expectedTokens,
       full: q.full,
-      user: answerText,
+      user: spoken,
       wrongIdxs,
       totalChunks: expectedTokens.length,
       score,
       ts: Date.now(),
     };
-
     const prev = JSON.parse(localStorage.getItem("records") || "[]");
     localStorage.setItem("records", JSON.stringify([...prev, rec]));
 
-    if (idx < list.length - 1) {
-      setAns("");
-      setIdx(idx + 1);
-    } else {
-      nav("/result", { state: { name: rec.name, date: rec.date, day } });
-    }
+    // 피드백 표시 (색상 하이라이트)
+    const highlighted = expectedTokens.map((tok, i) =>
+      wrongIdxs.includes(i) ? (
+        <span key={i} style={{ color: "red" }}>
+          {tok + " "}
+        </span>
+      ) : (
+        <span key={i} style={{ color: "lightgreen" }}>
+          {tok + " "}
+        </span>
+      )
+    );
+    setFeedback(
+      <div className="feedback">
+        <p>
+          정답 문장: <strong>{highlighted}</strong>
+        </p>
+        <p>학생 답안: {spoken}</p>
+        <p>
+          점수: {score} / {expectedTokens.length}
+        </p>
+      </div>
+    );
+
+    // 잠깐 보여주고 자동으로 다음 문제
+    setTimeout(() => {
+      setFeedback(null);
+      if (idx < list.length - 1) {
+        setAns("");
+        setIdx(idx + 1);
+      } else {
+        nav("/result", { state: { name: rec.name, date: rec.date, day } });
+      }
+    }, 3000);
   };
 
   return (
@@ -112,24 +128,12 @@ export default function Exam() {
           문제 {idx + 1} / {list.length}
         </h1>
         <p className="yellow">{q.koChunks.join(" / ")}</p>
-
-        <textarea
-          placeholder="영어로 문장을 쓰세요"
-          value={ans}
-          onChange={(e) => setAns(e.target.value)}
-          rows={3}
-        />
-
         <div className="nav">
-          {speechSupported && (
-            <button className="btn primary" onClick={handleSpeak}>
-              말하기
-            </button>
-          )}
-          <button className="btn" onClick={() => handleCheck()}>
-            채점하기
+          <button className="btn primary" onClick={handleSpeak}>
+            말하기
           </button>
         </div>
+        {feedback && <div className="result-box">{feedback}</div>}
       </div>
     </div>
   );
